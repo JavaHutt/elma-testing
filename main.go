@@ -20,6 +20,10 @@ type analysed struct {
 	url   string
 	count int
 }
+type totalCounter struct {
+	increment func(n int)
+	value     func() int
+}
 
 // isValidUrl tests a string to determine if it is a well-structured URL or not.
 func isValidURL(toTest string) bool {
@@ -39,7 +43,7 @@ func isValidURL(toTest string) bool {
 // searchInURL counts the number of search word in a given URL.
 func searchInURL(url string) analysed {
 	if !isValidURL(url) {
-		log.Fatal("Error! Not valid url format!")
+		log.Fatal("Error! Not valid URL format!")
 	}
 
 	resp, err := http.Get(url)
@@ -61,20 +65,26 @@ func searchInURL(url string) analysed {
 }
 
 // printResponse prints the counter for each URL and updates the total counter.
-func printResponse(ch <-chan analysed, total func(n int) int, mutex *sync.Mutex) {
+func printResponse(ch <-chan analysed, total totalCounter, mutex *sync.Mutex) {
 	for c := range ch {
 		mutex.Lock()
-		total(c.count)
+		total.increment(c.count)
 		mutex.Unlock()
 		fmt.Printf("Count for %s: %d\n", c.url, c.count)
 	}
 }
 
-func countTotal() func(n int) int {
+// countTotal is a simple counter with the ability to increment and to return value
+func countTotal() totalCounter {
 	total := 0
-	return func(n int) int {
-		total += n
-		return total
+
+	return totalCounter{
+		func(n int) {
+			total += n
+		},
+		func() int {
+			return total
+		},
 	}
 }
 
@@ -105,5 +115,5 @@ func main() {
 	}
 	wg.Wait()
 	close(urlChan)
-	fmt.Println("Total:", total(0))
+	fmt.Println("Total:", total.value())
 }
