@@ -61,22 +61,33 @@ func searchInURL(url string) analysed {
 }
 
 // printResponse prints the counter for each URL and updates the total counter.
-func printResponse(ch <-chan analysed, total *int) {
+func printResponse(ch <-chan analysed, total func(n int) int, mutex *sync.Mutex) {
 	for c := range ch {
-		*total += c.count
+		mutex.Lock()
+		total(c.count)
+		mutex.Unlock()
 		fmt.Printf("Count for %s: %d\n", c.url, c.count)
 	}
 }
 
+func countTotal() func(n int) int {
+	total := 0
+	return func(n int) int {
+		total += n
+		return total
+	}
+}
+
 func main() {
-	var total int
+	total := countTotal()
 	wg := new(sync.WaitGroup)
+	m := new(sync.Mutex)
 	urlChan := make(chan analysed)
 
 	fmt.Println("Enter valid urls using space as delimeter")
 	fmt.Println("Type 'quit' or tap Ctrl+C to stop and see the total counts")
 
-	go printResponse(urlChan, &total)
+	go printResponse(urlChan, total, m)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(bufio.ScanWords)
@@ -94,5 +105,5 @@ func main() {
 	}
 	wg.Wait()
 	close(urlChan)
-	fmt.Println("Total:", total)
+	fmt.Println("Total:", total(0))
 }
