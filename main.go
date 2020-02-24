@@ -3,101 +3,54 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 const (
 	searchWord = "Go"
 )
 
-type analysed struct {
-	url   string
-	count int
-}
 type totalCounter struct {
 	increment func(n int)
-	value     func() int
-}
-
-// isValidUrl tests a string to determine if it is a well-structured URL or not.
-func isValidURL(toTest string) bool {
-	_, err := url.ParseRequestURI(toTest)
-	if err != nil {
-		return false
-	}
-
-	u, err := url.Parse(toTest)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return false
-	}
-
-	return true
-}
-
-// searchInURL counts the number of search word in a given URL.
-func searchInURL(url string) analysed {
-	if !isValidURL(url) {
-		log.Fatal("Error! Not valid URL format!")
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return analysed{
-		url,
-		strings.Count(string(body), searchWord),
-	}
+	value     func() int32
 }
 
 // printResponse prints the counter for each URL and updates the total counter.
-func printResponse(ch <-chan analysed, total totalCounter, mutex *sync.Mutex) {
+func printResponse(ch <-chan Analysed, total totalCounter) {
 	for c := range ch {
-		mutex.Lock()
 		total.increment(c.count)
-		mutex.Unlock()
 		fmt.Printf("Count for %s: %d\n", c.url, c.count)
 	}
 }
 
 // countTotal is a simple counter with the ability to increment and to return value
 func countTotal() totalCounter {
-	total := 0
+	total := new(int32)
+
+	increment := func(n int) {
+		atomic.AddInt32(total, int32(n))
+	}
+	value := func() int32 {
+		return atomic.LoadInt32(total)
+	}
 
 	return totalCounter{
-		func(n int) {
-			total += n
-		},
-		func() int {
-			return total
-		},
+		increment,
+		value,
 	}
 }
 
 func main() {
 	total := countTotal()
 	wg := new(sync.WaitGroup)
-	m := new(sync.Mutex)
-	urlChan := make(chan analysed)
+	urlChan := make(chan Analysed)
 
 	fmt.Println("Enter valid urls using space as delimeter")
 	fmt.Println("Type 'quit' or tap Ctrl+C to stop and see the total counts")
 
-	go printResponse(urlChan, total, m)
+	go printResponse(urlChan, total)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(bufio.ScanWords)
@@ -109,8 +62,8 @@ func main() {
 		}
 		wg.Add(1)
 		go func(url string, wg *sync.WaitGroup) {
-			urlChan <- searchInURL(url)
-			wg.Done()
+			defer wg.Done()
+			urlChan <- SearchInURL(url)
 		}(text, wg)
 	}
 	wg.Wait()
