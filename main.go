@@ -2,14 +2,18 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/sync/semaphore"
 )
 
 const (
-	searchWord = "Go"
+	searchWord       = "Go"
+	concurrencyLimit = 5
 )
 
 type totalCounter struct {
@@ -46,6 +50,8 @@ func main() {
 	total := countTotal()
 	wg := new(sync.WaitGroup)
 	urlChan := make(chan Analysed)
+	ctx := context.Background()
+	sem := semaphore.NewWeighted(int64(concurrencyLimit))
 
 	fmt.Println("Enter valid urls using space as delimeter")
 	fmt.Println("Type 'quit' or tap Ctrl+C to stop and see the total counts")
@@ -60,10 +66,12 @@ func main() {
 		if text == "quit" {
 			break
 		}
+		sem.Acquire(ctx, 1)
 		wg.Add(1)
 		go func(url string, wg *sync.WaitGroup) {
 			defer wg.Done()
 			urlChan <- SearchInURL(url)
+			sem.Release(1)
 		}(text, wg)
 	}
 	wg.Wait()
