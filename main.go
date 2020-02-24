@@ -24,8 +24,14 @@ type totalCounter struct {
 // printResponse prints the counter for each URL and updates the total counter.
 func printResponse(ch <-chan Analysed, total totalCounter) {
 	for c := range ch {
-		total.increment(c.count)
-		fmt.Printf("Count for %s: %d\n", c.url, c.count)
+		url, count, err := c.url, c.count, c.err
+
+		if err != nil {
+			fmt.Printf("Problem with `%s`: %s\n", url, err)
+			continue
+		}
+		total.increment(count)
+		fmt.Printf("Count for %s: %d\n", url, count)
 	}
 }
 

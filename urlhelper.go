@@ -1,8 +1,8 @@
 package main
 
 import (
+	"errors"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +12,7 @@ import (
 type Analysed struct {
 	url   string
 	count int
+	err   error
 }
 
 // isValidUrl tests a string to determine if it is a well-structured URL or not.
@@ -30,25 +31,29 @@ func isValidURL(toTest string) bool {
 }
 
 // SearchInURL counts the number of search word in a given URL.
-func SearchInURL(url string) Analysed {
+func SearchInURL(url string) (result Analysed) {
+	result.url = url
+
 	if !isValidURL(url) {
-		log.Fatal("Error! Not valid URL format!")
+		result.err = errors.New("Error! Not valid URL format")
+		return
 	}
 
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Fatal(err)
+		result.err = err
+		return
 	}
 
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		result.err = err
+		return
 	}
 
-	return Analysed{
-		url,
-		strings.Count(string(body), searchWord),
-	}
+	result.count = strings.Count(string(body), searchWord)
+
+	return
 }
